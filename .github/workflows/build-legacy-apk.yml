@@ -1,0 +1,47 @@
+name: Build WinDock Legacy APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'android-legacy/**'
+      - '.github/workflows/build-legacy-apk.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      # Current Android command-line tools run on a modern JDK.
+      - name: Set up JDK 17 for Android SDK tools
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build packages
+        run: sdkmanager "platforms;android-28" "build-tools;29.0.3"
+
+      # AGP 3.6.4 / Gradle 5.6.4 require an older JDK than current AGP.
+      - name: Set up JDK 8 for legacy Gradle
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+
+      - name: Build debug APK
+        working-directory: android-legacy
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: WinDock-Legacy-debug-apk
+          path: android-legacy/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
