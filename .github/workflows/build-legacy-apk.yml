@@ -9,27 +9,45 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out source
         uses: actions/checkout@v4
 
-      # Current Android command-line tools run on a modern JDK.
+      # The hosted runner already includes Android SDK command-line tools.
+      # Avoid setup-android here: its current action attempts to install the
+      # obsolete SDK package named "tools", which fails on current SDK repos.
       - name: Set up JDK 17 for Android SDK tools
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Configure Android SDK tools
+        shell: bash
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          if [ -x "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+            echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          elif [ -x "$SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager" ]; then
+            echo "$SDK_ROOT/cmdline-tools/16.0/bin" >> "$GITHUB_PATH"
+          else
+            echo "Could not find sdkmanager under $SDK_ROOT/cmdline-tools" >&2
+            find "$SDK_ROOT/cmdline-tools" -maxdepth 3 -name sdkmanager -type f -print 2>/dev/null || true
+            exit 1
+          fi
 
-      - name: Install Android build packages
-        run: sdkmanager "platforms;android-28" "build-tools;29.0.3"
+      - name: Accept Android SDK licenses and install build packages
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install "platforms;android-28" "build-tools;29.0.3"
 
-      # AGP 3.6.4 / Gradle 5.6.4 require an older JDK than current AGP.
+      # AGP 3.6.4 / Gradle 5.6.4 need JDK 8 for the actual build.
       - name: Set up JDK 8 for legacy Gradle
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '8'
